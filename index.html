@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#163b32" />
+    <title>Tractor Sequencer</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script defer src="./model.js"></script>
+    <script defer src="./app.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark" aria-hidden="true">T</div>
+        <div>
+          <strong>Tractor Sequencer</strong><small>Cooperative planner</small>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Main navigation">
+        <button data-view="overview" aria-current="page">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            aria-hidden="true"
+          >
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" /></svg
+          >Schedule
+        </button>
+        <button data-view="farm">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            aria-hidden="true"
+          >
+            <path d="M4 5h16M4 12h16M4 19h16" />
+            <circle cx="6" cy="5" r="2" fill="currentColor" />
+            <circle cx="15" cy="12" r="2" fill="currentColor" />
+            <circle cx="10" cy="19" r="2" fill="currentColor" /></svg
+          >Farm bookings
+        </button>
+        <button data-view="model">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.7"
+            aria-hidden="true"
+          >
+            <path d="M4 4h16v16H4zM8 8h8M8 12h8M8 16h4" /></svg
+          >Settings
+        </button>
+      </nav>
+      <div class="side-bottom"><span id="saveStatus"></span></div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div class="crumb">
+          Cooperative planner <span aria-hidden="true">/</span>
+          <strong id="crumbView">Schedule</strong>
+        </div>
+        <div class="top-actions">
+          <button class="btn secondary" id="exportCSV">Export CSV</button
+          ><button class="btn" id="addTop">Add farm</button>
+        </div>
+      </header>
+      <main id="main" tabindex="-1">
+        <div class="intro">
+          <h1 id="pageTitle">Ploughing schedule</h1>
+          <div id="scenarioPicker" class="scenario">
+            <label for="scenario">Bookings</label>
+            <select id="scenario">
+              <option value="pitch">28-farm example</option>
+              <option value="simple">4-farm example</option>
+              <option value="blank">Start an empty queue</option>
+              <option value="custom" disabled>Custom bookings</option>
+            </select>
+          </div>
+        </div>
+        <div id="warning" class="notice" hidden role="status"></div>
+        <section id="overviewView" aria-label="Ploughing schedule">
+          <div class="plan-summary">
+            <article class="next-farm">
+              <h2>First farm to serve</h2>
+              <p class="next-name" id="nextName"></p>
+              <p class="next-meta" id="nextMeta"></p>
+              <button class="next-reason" id="nextReason">
+                Why this farm?
+              </button>
+            </article>
+            <article class="panel loss-summary">
+              <h2>Estimated loss avoided</h2>
+              <p class="loss-value">
+                <strong id="saving"></strong><span id="savePercent"></span>
+              </p>
+              <dl class="loss-details">
+                <div>
+                  <dt>Booking order</dt>
+                  <dd id="fcfsLoss"></dd>
+                </div>
+                <div>
+                  <dt id="selectedLabel">Priority order</dt>
+                  <dd id="ruleLoss"></dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+          <div class="plan-controls">
+            <fieldset>
+              <legend>Service rule</legend>
+              <div class="rule-options">
+                <label
+                  ><input
+                    name="mode"
+                    type="radio"
+                    value="smith"
+                    checked
+                  />Lowest estimated loss</label
+                >
+                <label
+                  ><input name="mode" type="radio" value="cap" />Limit extra
+                  delay</label
+                >
+              </div>
+            </fieldset>
+            <div id="capField" hidden>
+              <label for="cap">Maximum extra delay (working days)</label>
+              <input
+                id="cap"
+                type="number"
+                min="0"
+                max="1000"
+                step="any"
+                value="3"
+                aria-describedby="capHint"
+              />
+              <small id="capHint"
+                >Compared with each farm’s finish in booking order.</small
+              >
+            </div>
+            <p id="fairnessStatus" class="rule-impact"></p>
+          </div>
+          <article class="panel schedule-panel">
+            <div class="panel-head">
+              <div>
+                <h2>Service order</h2>
+                <p id="campaignSummary"></p>
+              </div>
+              <div class="toolbar">
+                <input
+                  id="scheduleSearch"
+                  type="search"
+                  placeholder="Find a farm"
+                  aria-label="Find a farm in the schedule"
+                />
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Order</th>
+                    <th scope="col">Farm</th>
+                    <th scope="col">Tractor time</th>
+                    <th scope="col">Finish day</th>
+                    <th scope="col">Change vs booking</th>
+                    <th scope="col">
+                      <span class="sr-only">Reason for position</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody id="scheduleBody"></tbody>
+              </table>
+              <div id="scheduleEmpty" class="empty" hidden>
+                <h3>No farms booked</h3>
+                <p>Add a farm or choose an example above.</p>
+              </div>
+            </div>
+            <div class="table-footer">
+              <span id="scheduleCount"></span
+              ><button class="text-btn" data-view="farm">Edit bookings</button>
+            </div>
+          </article>
+          <details class="fold panel timeline-fold" id="timelineFold">
+            <summary>Compare timelines</summary>
+            <div class="legend legend-bar" id="legend"></div>
+            <div class="timeline" id="timeline"></div>
+          </details>
+          <div class="bottom-actions">
+            <button id="printResults" class="text-btn">Print schedule</button>
+          </div>
+          <div class="print-only" id="printAssumptions"></div>
+        </section>
+        <section id="farmView" aria-label="Farm bookings" hidden>
+          <article class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>Booking order</h2>
+                <p>Use the arrows to match the order requests came in.</p>
+              </div>
+              <button class="btn quiet" data-view="overview">
+                View schedule
+              </button>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Booking</th>
+                    <th scope="col">Farm</th>
+                    <th scope="col">Crop</th>
+                    <th scope="col">Area (ha)</th>
+                    <th scope="col">Move</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="farmBody"></tbody>
+              </table>
+              <div class="empty" id="farmEmpty" hidden>
+                <h3>No bookings yet</h3>
+                <p>Choose Add farm to enter a name, crop and area.</p>
+              </div>
+            </div>
+            <div class="table-footer"><span id="bookingCount"></span></div>
+          </article>
+          <details class="fold panel">
+            <summary>Save or open a booking file</summary>
+            <div class="fold-body">
+              <p>
+                Keep a copy of your farms and settings, or transfer them to
+                another device.
+              </p>
+              <div class="data-actions">
+                <button id="saveScenario" class="btn secondary">
+                  Save file</button
+                ><button id="importScenario" class="btn secondary">
+                  Open file
+                </button>
+              </div>
+            </div>
+          </details>
+          <input
+            id="importInput"
+            type="file"
+            accept=".json,application/json"
+            hidden
+          />
+        </section>
+        <section id="modelView" aria-label="Settings" hidden>
+          <article class="panel">
+            <div class="panel-head"><h2>Tractor and working day</h2></div>
+            <div class="panel-body settings-grid">
+              <div>
+                <label for="capacity">Field capacity (ha/h)</label
+                ><input
+                  id="capacity"
+                  type="number"
+                  min="0.01"
+                  max="100"
+                  step="any"
+                  value="0.8"
+                />
+              </div>
+              <div>
+                <label for="hours">Working hours per day</label
+                ><input
+                  id="hours"
+                  type="number"
+                  min="0.1"
+                  max="24"
+                  step="any"
+                  value="8"
+                />
+              </div>
+              <div>
+                <label for="travel">Travel and setup per farm (h)</label
+                ><input
+                  id="travel"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="any"
+                  value="0.6"
+                />
+              </div>
+            </div>
+          </article>
+          <article class="panel panel-spaced">
+            <div class="panel-head">
+              <div>
+                <h2>Crop estimates</h2>
+                <p>
+                  Replace the example values with local estimates when
+                  available.
+                </p>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="model-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Crop</th>
+                    <th scope="col">Value lost per day (%)</th>
+                    <th scope="col">Yield (t/ha)</th>
+                    <th scope="col">Price (₦/t)</th>
+                  </tr>
+                </thead>
+                <tbody id="cropBody"></tbody>
+              </table>
+            </div>
+            <div class="table-footer">For a loss of 1% per day, enter 1.</div>
+          </article>
+          <details class="fold panel">
+            <summary>How priority is calculated</summary>
+            <div class="fold-body">
+              <dl class="method-list">
+                <div>
+                  <dt>Daily loss (₦/day)</dt>
+                  <dd>
+                    Area × yield × price × daily loss fraction. Divide the
+                    percentage above by 100 to get the fraction.
+                  </dd>
+                </div>
+                <div>
+                  <dt>Job time (hours)</dt>
+                  <dd>Area ÷ field capacity, plus travel and setup.</dd>
+                </div>
+                <div>
+                  <dt>Priority score</dt>
+                  <dd>
+                    Daily loss ÷ job time. Higher scores go first; tied farms
+                    keep booking order.
+                  </dd>
+                </div>
+                <div>
+                  <dt>Estimated loss for a schedule</dt>
+                  <dd>
+                    For each farm, multiply its daily loss by its finish day.
+                    Add those losses for all farms.
+                  </dd>
+                </div>
+              </dl>
+              <p>
+                With a delay limit, each farm must finish within the chosen
+                number of working days of its booking-order finish. The planner
+                chooses the highest-priority next job that leaves all deadlines
+                achievable. It may retain booking order if that gives a lower
+                loss.
+              </p>
+            </div>
+          </details>
+          <details class="fold panel">
+            <summary>Assumptions and sources</summary>
+            <div class="fold-body">
+              <p>
+                One tractor ploughs fields that are all ready at the start.
+                Planting is due immediately and is assumed to wait until
+                ploughing finishes. Delay costs are linear. A finish day is
+                elapsed tractor hours divided by working hours per day.
+              </p>
+              <p>
+                Travel and setup use the same allowance for each farm, including
+                the first. The schedule does not model routes, weather or
+                breakdowns.
+              </p>
+              <p>
+                The example farms are synthetic. Default loss rates for rice,
+                maize and soybean are historical US seeding examples; the cowpea
+                rate, all prices and all yields are assumptions.
+              </p>
+              <ul class="source-links">
+                <li>
+                  <a
+                    href="https://faculty.uobasrah.edu.iq/uploads/teaching/1722757166.pdf"
+                    target="_blank"
+                    rel="noopener"
+                    >ASAE D497.5, Table 6</a
+                  >
+                  · crop coefficients
+                </li>
+                <li>
+                  <a
+                    href="https://web-static.stern.nyu.edu/om/faculty/pinedo/scheduling/schwiegelshohn2006.pdf"
+                    target="_blank"
+                    rel="noopener"
+                    >Scheduling Problems and Solutions, slide 40</a
+                  >
+                  · Smith’s rule
+                </li>
+              </ul>
+            </div>
+          </details>
+        </section>
+      </main>
+    </div>
+    <div class="toast" id="toast" role="status" hidden></div>
+    <dialog id="farmDialog" aria-labelledby="farmDialogTitle">
+      <form id="farmForm">
+        <div class="dialog-head">
+          <h2 id="farmDialogTitle">Add a farm</h2>
+          <button
+            class="icon-btn"
+            type="button"
+            data-close="farmDialog"
+            aria-label="Close farm form"
+          >
+            ×
+          </button>
+        </div>
+        <div class="dialog-body">
+          <label for="farmName">Farm name</label
+          ><input
+            id="farmName"
+            required
+            maxlength="60"
+            placeholder="e.g. North field"
+            autocomplete="off"
+          /><label for="farmCrop">Crop</label
+          ><select id="farmCrop"></select
+          ><label for="farmArea">Area (hectares)</label
+          ><input
+            id="farmArea"
+            type="number"
+            min="0.01"
+            max="10000"
+            step="any"
+            value="1"
+            required
+          /><small class="field-hint"
+            >A new farm joins the end of the booking queue. You can move it
+            later.</small
+          >
+        </div>
+        <div class="dialog-actions">
+          <button class="btn secondary" type="button" data-close="farmDialog">
+            Cancel</button
+          ><button class="btn" type="submit">Save farm</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog
+      id="detailDialog"
+      aria-labelledby="detailTitle"
+      aria-describedby="detailReason"
+    >
+      <div class="dialog-head">
+        <div>
+          <h2 id="detailTitle">Farm</h2>
+          <p id="detailMeta" class="detail-meta"></p>
+        </div>
+        <button
+          class="icon-btn close-detail"
+          data-close="detailDialog"
+          aria-label="Close explanation"
+        >
+          ×
+        </button>
+      </div>
+      <div class="dialog-body" id="detailBody"></div>
+    </dialog>
+    <dialog id="confirmDialog" aria-labelledby="confirmTitle">
+      <div class="dialog-head">
+        <h2 id="confirmTitle">Load a different scenario?</h2>
+      </div>
+      <div class="dialog-body">
+        <p id="confirmText">
+          This replaces the current queue and settings. Save a scenario file
+          first if you want to keep your edits.
+        </p>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn secondary" id="confirmCancel">Keep current</button
+        ><button class="btn" id="confirmOK">Load scenario</button>
+      </div>
+    </dialog>
+    <noscript
+      ><p class="enable-js">
+        This app needs JavaScript enabled in your browser to calculate
+        schedules.
+      </p></noscript
+    >
+  </body>
+</html>
